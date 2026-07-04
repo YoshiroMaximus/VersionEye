@@ -98,11 +98,10 @@ final class HangarClient {
         String url = API + "/projects/" + ApiHttp.encode(slug)
                 + "/versions/" + ApiHttp.encode(version) + "/PAPER/download";
         JsonElement fileInfo = paper.getAsJsonObject().get("fileInfo");
-        String sha256 = fileInfo != null && fileInfo.isJsonObject()
-                && fileInfo.getAsJsonObject().get("sha256Hash") != null
-                && !fileInfo.getAsJsonObject().get("sha256Hash").isJsonNull()
-                ? fileInfo.getAsJsonObject().get("sha256Hash").getAsString()
+        JsonElement hash = fileInfo != null && fileInfo.isJsonObject()
+                ? fileInfo.getAsJsonObject().get("sha256Hash")
                 : null;
+        String sha256 = hash != null && !hash.isJsonNull() ? hash.getAsString() : null;
         return Optional.of(new DownloadInfo(url, sha256));
     }
 

@@ -7,6 +7,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Locale;
 
@@ -42,13 +44,12 @@ final class ApiHttp {
     }
 
     /** Downloads a URL to a file, following redirects. Overwrites the target. */
-    void download(String url, java.nio.file.Path target) throws IOException, InterruptedException {
+    void download(String url, Path target) throws IOException, InterruptedException {
         HttpRequest request = request(url).timeout(Duration.ofMinutes(2)).GET().build();
-        HttpResponse<java.nio.file.Path> response = http.send(request,
-                HttpResponse.BodyHandlers.ofFile(target));
+        HttpResponse<Path> response = http.send(request, HttpResponse.BodyHandlers.ofFile(target));
         int status = response.statusCode();
         if (status < 200 || status >= 300) {
-            java.nio.file.Files.deleteIfExists(target);
+            Files.deleteIfExists(target);
             throw new IOException("HTTP " + status + " from " + request.uri());
         }
     }

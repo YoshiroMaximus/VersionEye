@@ -58,8 +58,14 @@ final class UpdateCheckService {
 
     private volatile List<UpdateResult> lastResults = List.of();
 
+    /**
+     * A downloadable update found by the latest check. Modrinth entries
+     * carry the URL and hash directly; Hangar entries only carry the
+     * project slug, and the download details are fetched lazily when a
+     * download is actually requested.
+     */
     private record PendingDownload(String pluginName, String version, String url,
-            String expectedHash, String hashAlgorithm, Path installedJar) {
+            String expectedHash, String hashAlgorithm, Path installedJar, String hangarSlug) {
     }
 
     UpdateCheckService(VersionEyePlugin plugin) {
@@ -152,24 +158,23 @@ final class UpdateCheckService {
             String gameVersion, boolean includePrereleases, boolean checkHangar) {
         try {
             pendingDownloads.remove(name);
-            UpdateResult result;
             // A configured override always wins over automatic matching.
             String override = override(name);
             Optional<UpdateResult> byHash = override == null && jar != null
                     ? checkByHash(name, installedVersion, jar, gameVersion, includePrereleases)
                     : Optional.empty();
-            result = byHash.isPresent()
+            UpdateResult result = byHash.isPresent()
                     ? byHash.get()
                     : checkByName(name, installedVersion, jar, override, gameVersion,
                             includePrereleases, checkHangar);
 
-            // An update the admin chose to skip is reported as up to date
-            // until something newer appears.
+            // An update the admin chose to skip stays muted until something
+            // newer appears.
             if (result.status() == UpdateResult.Status.UPDATE_AVAILABLE
-                    && isIgnored(name, result.latestVersion())) {
+                    && result.latestVersion().equalsIgnoreCase(
+                            configValue("ignored-versions", name))) {
                 pendingDownloads.remove(name);
-                result = new UpdateResult(name, result.installedVersion(), result.latestVersion(),
-                        result.projectUrl(), result.source(), UpdateResult.Status.UP_TO_DATE);
+                result = withStatus(result, UpdateResult.Status.IGNORED);
             }
             return result;
         } catch (InterruptedException e) {
@@ -181,17 +186,9 @@ final class UpdateCheckService {
         }
     }
 
-    private boolean isIgnored(String pluginName, String latestVersion) {
-        ConfigurationSection ignored = plugin.getConfig().getConfigurationSection("ignored-versions");
-        if (ignored == null) {
-            return false;
-        }
-        for (String key : ignored.getKeys(false)) {
-            if (key.equalsIgnoreCase(pluginName)) {
-                return latestVersion.equalsIgnoreCase(ignored.getString(key));
-            }
-        }
-        return false;
+    private static UpdateResult withStatus(UpdateResult result, UpdateResult.Status status) {
+        return new UpdateResult(result.pluginName(), result.installedVersion(),
+                result.latestVersion(), result.projectUrl(), result.source(), status);
     }
 
     /**
@@ -237,8 +234,7 @@ final class UpdateCheckService {
         }
 
         String shownInstalled = installed != null ? installed.versionNumber() : installedVersion;
-        registerDownload(name, latest.versionNumber(), latest.fileUrl(), latest.fileSha512(),
-                "SHA-512", jar);
+        registerModrinthDownload(name, latest, jar);
         return Optional.of(new UpdateResult(name, shownInstalled, latest.versionNumber(),
                 modrinthUrl(latest.projectId()), UpdateResult.SOURCE_MODRINTH,
                 UpdateResult.Status.UPDATE_AVAILABLE));
@@ -291,8 +287,7 @@ final class UpdateCheckService {
         String latestNumber = latest.get().versionNumber();
         boolean outdated = VersionComparator.compare(latestNumber, installedVersion) > 0;
         if (outdated) {
-            registerDownload(name, latestNumber, latest.get().fileUrl(), latest.get().fileSha512(),
-                    "SHA-512", jar);
+            registerModrinthDownload(name, latest.get(), jar);
         }
         return new UpdateResult(name, installedVersion, latestNumber,
                 modrinthUrl(project.slug()), UpdateResult.SOURCE_MODRINTH,
@@ -323,21 +318,23 @@ final class UpdateCheckService {
             return UpdateResult.notFound(name, installedVersion);
         }
         boolean outdated = VersionComparator.compare(latest.get(), installedVersion) > 0;
-        if (outdated) {
-            hangar.downloadInfo(project.slug(), latest.get()).ifPresent(info ->
-                    registerDownload(name, latest.get(), info.url(), info.sha256(), "SHA-256", jar));
+        if (outdated && jar != null) {
+            // Download URL and hash are fetched lazily in downloadOne, so the
+            // routine check path doesn't pay an extra request per plugin.
+            pendingDownloads.put(name, new PendingDownload(name, latest.get(), null, null,
+                    "SHA-256", jar, project.slug()));
         }
         return new UpdateResult(name, installedVersion, latest.get(),
                 project.url(), UpdateResult.SOURCE_HANGAR,
                 outdated ? UpdateResult.Status.UPDATE_AVAILABLE : UpdateResult.Status.UP_TO_DATE);
     }
 
-    private void registerDownload(String name, String version, String url, String hash,
-            String hashAlgorithm, Path jar) {
-        if (url == null || jar == null) {
+    private void registerModrinthDownload(String name, ModrinthClient.VersionInfo latest, Path jar) {
+        if (latest.fileUrl() == null || jar == null) {
             return;
         }
-        pendingDownloads.put(name, new PendingDownload(name, version, url, hash, hashAlgorithm, jar));
+        pendingDownloads.put(name, new PendingDownload(name, latest.versionNumber(),
+                latest.fileUrl(), latest.fileSha512(), "SHA-512", jar, null));
     }
 
     /**
@@ -412,28 +409,39 @@ final class UpdateCheckService {
     private String downloadOne(PendingDownload download) {
         String label = download.pluginName() + " " + download.version();
         try {
+            // Hangar entries resolve their download URL and hash on demand.
+            if (download.url() == null) {
+                HangarClient.DownloadInfo info =
+                        hangar.downloadInfo(download.hangarSlug(), download.version()).orElse(null);
+                if (info == null) {
+                    return "No downloadable file for " + label + ".";
+                }
+                download = new PendingDownload(download.pluginName(), download.version(),
+                        info.url(), info.sha256(), download.hashAlgorithm(),
+                        download.installedJar(), download.hangarSlug());
+            }
+
             Path updateDir = plugin.getServer().getUpdateFolderFile().toPath();
             Path target = updateDir.resolve(download.installedJar().getFileName().toString());
-            if (downloadedKeys.contains(label) && Files.isRegularFile(target)) {
+            if (Files.isRegularFile(target)
+                    && (downloadedKeys.contains(label) || matchesHash(download, target))) {
+                downloadedKeys.add(label);
                 return label + " is already downloaded (restart to apply).";
             }
             Files.createDirectories(updateDir);
             Path temp = target.resolveSibling(target.getFileName() + ".part");
             try {
                 http.download(download.url(), temp);
-                if (download.expectedHash() != null) {
-                    String actual = fileHash(download.hashAlgorithm(), temp);
-                    if (!actual.equalsIgnoreCase(download.expectedHash())) {
-                        return "Discarded " + label + ": downloaded file failed hash verification.";
-                    }
+                if (download.expectedHash() != null && !matchesHash(download, temp)) {
+                    return "Discarded " + label + ": downloaded file failed hash verification.";
                 }
                 Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
             } finally {
                 Files.deleteIfExists(temp);
             }
             downloadedKeys.add(label);
-            return "Downloaded " + label + " to " + plugin.getServer().getUpdateFolderFile().getName()
-                    + "/" + target.getFileName() + "; it will be applied on the next restart"
+            return "Downloaded " + label + " to " + updateDir.getFileName() + "/"
+                    + target.getFileName() + "; it will be applied on the next restart"
                     + (download.expectedHash() == null ? " (externally hosted, hash not verified)" : "")
                     + ".";
         } catch (InterruptedException e) {
@@ -445,14 +453,18 @@ final class UpdateCheckService {
         }
     }
 
+    private static boolean matchesHash(PendingDownload download, Path file) throws Exception {
+        return download.expectedHash() != null
+                && fileHash(download.hashAlgorithm(), file).equalsIgnoreCase(download.expectedHash());
+    }
+
     /**
      * Mutes the currently available update for a plugin until something
      * newer is published. Must be called on the main thread (writes config).
      */
     String ignoreLatest(String pluginName) {
-        UpdateResult match = lastResults.stream()
-                .filter(r -> r.status() == UpdateResult.Status.UPDATE_AVAILABLE
-                        && r.pluginName().equalsIgnoreCase(pluginName))
+        UpdateResult match = lastOutdated().stream()
+                .filter(r -> r.pluginName().equalsIgnoreCase(pluginName))
                 .findFirst().orElse(null);
         if (match == null) {
             return "No pending update for " + pluginName + " to ignore.";
@@ -461,10 +473,7 @@ final class UpdateCheckService {
         plugin.saveConfig();
         pendingDownloads.remove(match.pluginName());
         lastResults = lastResults.stream()
-                .map(r -> r == match
-                        ? new UpdateResult(r.pluginName(), r.installedVersion(), r.latestVersion(),
-                                r.projectUrl(), r.source(), UpdateResult.Status.UP_TO_DATE)
-                        : r)
+                .map(r -> r == match ? withStatus(r, UpdateResult.Status.IGNORED) : r)
                 .toList();
         return "Ignoring " + match.pluginName() + " " + match.latestVersion()
                 + "; you will be notified again when a newer version is published.";
@@ -472,18 +481,13 @@ final class UpdateCheckService {
 
     /** Removes an ignore entry. Must be called on the main thread (writes config). */
     String unignore(String pluginName) {
-        ConfigurationSection ignored = plugin.getConfig().getConfigurationSection("ignored-versions");
-        if (ignored != null) {
-            for (String key : ignored.getKeys(false)) {
-                if (key.equalsIgnoreCase(pluginName)) {
-                    plugin.getConfig().set("ignored-versions." + key, null);
-                    plugin.saveConfig();
-                    return "No longer ignoring updates for " + key
-                            + "; the next check will report them again.";
-                }
-            }
+        String key = configKey("ignored-versions", pluginName);
+        if (key == null) {
+            return "No ignored version for " + pluginName + ".";
         }
-        return "No ignored version for " + pluginName + ".";
+        plugin.getConfig().set("ignored-versions." + key, null);
+        plugin.saveConfig();
+        return "No longer ignoring updates for " + key + "; the next check will report them again.";
     }
 
     /** Names of plugins with an ignored version, for tab completion. */
@@ -498,16 +502,28 @@ final class UpdateCheckService {
     }
 
     private String override(String pluginName) {
-        ConfigurationSection overrides = plugin.getConfig().getConfigurationSection("overrides");
-        if (overrides == null) {
+        return configValue("overrides", pluginName);
+    }
+
+    /** The actual key in a config section matching the name case-insensitively, or null. */
+    private String configKey(String section, String name) {
+        ConfigurationSection sec = plugin.getConfig().getConfigurationSection(section);
+        if (sec == null) {
             return null;
         }
-        for (String key : overrides.getKeys(false)) {
-            if (key.equalsIgnoreCase(pluginName)) {
-                return overrides.getString(key);
+        for (String key : sec.getKeys(false)) {
+            if (key.equalsIgnoreCase(name)) {
+                return key;
             }
         }
         return null;
+    }
+
+    /** The value under a case-insensitively matched key in a config section, or null. */
+    private String configValue(String section, String name) {
+        String key = configKey(section, name);
+        return key == null ? null
+                : plugin.getConfig().getConfigurationSection(section).getString(key);
     }
 
     /** Runs a full check and reports the outcome to the console. */

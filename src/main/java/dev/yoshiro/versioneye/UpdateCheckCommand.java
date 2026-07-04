@@ -83,11 +83,15 @@ final class UpdateCheckCommand implements TabExecutor {
         return true;
     }
 
-    /** Runs a fresh check, then fetches updates into the update folder. */
+    /** Fetches updates into the update folder, checking first if needed. */
     private void download(CommandSender sender, String pluginName) {
-        sender.sendMessage(Component.text("Checking and downloading updates...", NamedTextColor.GRAY));
+        sender.sendMessage(Component.text("Downloading updates...", NamedTextColor.GRAY));
         plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
-            checkService.checkAll();
+            // Reuse the last check's findings when there are any; a full
+            // re-scan is only needed when nothing is pending yet.
+            if (checkService.downloadablePluginNames().isEmpty()) {
+                checkService.checkAll();
+            }
             for (String line : checkService.downloadUpdates(pluginName)) {
                 sender.sendMessage(Component.text(line,
                         line.startsWith("Downloaded") ? NamedTextColor.GREEN : NamedTextColor.YELLOW));

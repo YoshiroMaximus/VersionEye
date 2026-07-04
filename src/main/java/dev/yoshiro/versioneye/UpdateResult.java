@@ -16,6 +16,8 @@ public record UpdateResult(
     public enum Status {
         UP_TO_DATE,
         UPDATE_AVAILABLE,
+        /** An available update the admin chose to skip via /updatecheck ignore. */
+        IGNORED,
         NOT_FOUND,
         ERROR
     }
