@@ -52,12 +52,12 @@ final class UpdateCheckCommand implements CommandExecutor {
                         .append(Component.text(r.installedVersion(), NamedTextColor.RED))
                         .append(Component.text(" -> ", NamedTextColor.GRAY))
                         .append(Component.text(r.latestVersion(), NamedTextColor.GREEN))
-                        .append(Component.text(" [Modrinth]", NamedTextColor.AQUA)
+                        .append(Component.text(" [" + r.source() + "]", NamedTextColor.AQUA)
                                 .clickEvent(ClickEvent.openUrl(r.projectUrl()))));
             }
         }
         if (!notFound.isEmpty()) {
-            sender.sendMessage(Component.text("Not found on Modrinth: "
+            sender.sendMessage(Component.text("Not found on Modrinth or Hangar: "
                     + notFound.stream().map(UpdateResult::pluginName)
                             .reduce((a, b) -> a + ", " + b).orElse(""),
                     NamedTextColor.GRAY));

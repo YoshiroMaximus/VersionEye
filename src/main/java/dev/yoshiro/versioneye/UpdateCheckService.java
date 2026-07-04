@@ -36,10 +36,13 @@ final class UpdateCheckService {
 
     private final VersionEyePlugin plugin;
     private final ModrinthClient modrinth;
+    private final HangarClient hangar;
     private final ExecutorService executor;
 
     /** Resolved plugin name -> Modrinth project, cached across runs (name fallback path). */
     private final Map<String, ModrinthClient.Project> resolved = new ConcurrentHashMap<>();
+    /** Resolved plugin name -> Hangar project, cached across runs (last-resort fallback). */
+    private final Map<String, HangarClient.Project> resolvedHangar = new ConcurrentHashMap<>();
     /** Jar sha512 -> the Modrinth version that file belongs to; immutable per file. */
     private final Map<String, ModrinthClient.VersionInfo> knownFiles = new ConcurrentHashMap<>();
     private final AtomicBoolean checkRunning = new AtomicBoolean(false);
@@ -49,6 +52,7 @@ final class UpdateCheckService {
     UpdateCheckService(VersionEyePlugin plugin) {
         this.plugin = plugin;
         this.modrinth = new ModrinthClient(plugin.getPluginMeta().getVersion());
+        this.hangar = new HangarClient(plugin.getPluginMeta().getVersion());
         this.executor = Executors.newFixedThreadPool(MAX_CONCURRENT_CHECKS, runnable -> {
             Thread thread = new Thread(runnable, "VersionEye-worker");
             thread.setDaemon(true);
@@ -182,24 +186,42 @@ final class UpdateCheckService {
 
         String shownInstalled = installed != null ? installed.versionNumber() : installedVersion;
         return Optional.of(new UpdateResult(name, shownInstalled, latest.versionNumber(),
-                latest.projectId(), UpdateResult.Status.UPDATE_AVAILABLE));
+                modrinthUrl(latest.projectId()), UpdateResult.SOURCE_MODRINTH,
+                UpdateResult.Status.UPDATE_AVAILABLE));
     }
 
     private static UpdateResult upToDate(String name, String installedVersion,
             ModrinthClient.VersionInfo latest) {
         return new UpdateResult(name, installedVersion, latest.versionNumber(),
-                latest.projectId(), UpdateResult.Status.UP_TO_DATE);
+                modrinthUrl(latest.projectId()), UpdateResult.SOURCE_MODRINTH,
+                UpdateResult.Status.UP_TO_DATE);
     }
 
-    /** Fallback matching by plugin name (or configured override slug). */
+    private static String modrinthUrl(String slugOrId) {
+        return "https://modrinth.com/plugin/" + slugOrId;
+    }
+
+    /**
+     * Fallback matching by plugin name (or configured override). Tries
+     * Modrinth first; plugins not published there (e.g. ProtocolLib) are
+     * looked up on Hangar instead.
+     */
     private UpdateResult checkByName(String name, String installedVersion, String override,
             String gameVersion, boolean includePrereleases) throws Exception {
+        // An override like "hangar:ProtocolLib" pins the plugin to a Hangar project.
+        if (override != null && override.toLowerCase(Locale.ROOT).startsWith("hangar:")) {
+            return checkOnHangar(name, installedVersion, override.substring("hangar:".length()).strip());
+        }
+
         ModrinthClient.Project project = resolved.get(name);
         if (project == null) {
             Optional<ModrinthClient.Project> found = override != null
                     ? modrinth.fetchProject(override)
                     : modrinth.resolveProject(name);
             if (found.isEmpty()) {
+                if (override == null && plugin.getConfig().getBoolean("check-hangar", true)) {
+                    return checkOnHangar(name, installedVersion, null);
+                }
                 return UpdateResult.notFound(name, installedVersion);
             }
             project = found.get();
@@ -213,7 +235,37 @@ final class UpdateCheckService {
         }
         String latestNumber = latest.get().versionNumber();
         boolean outdated = VersionComparator.compare(latestNumber, installedVersion) > 0;
-        return new UpdateResult(name, installedVersion, latestNumber, project.slug(),
+        return new UpdateResult(name, installedVersion, latestNumber,
+                modrinthUrl(project.slug()), UpdateResult.SOURCE_MODRINTH,
+                outdated ? UpdateResult.Status.UPDATE_AVAILABLE : UpdateResult.Status.UP_TO_DATE);
+    }
+
+    /**
+     * Last-resort lookup on Hangar. Hangar has no file-hash lookup, so this
+     * is name and version-string matching only; only the Release channel is
+     * considered.
+     */
+    private UpdateResult checkOnHangar(String name, String installedVersion, String overrideSlug)
+            throws Exception {
+        HangarClient.Project project = resolvedHangar.get(name);
+        if (project == null) {
+            Optional<HangarClient.Project> found = overrideSlug != null
+                    ? hangar.fetchProject(overrideSlug)
+                    : hangar.resolveProject(name);
+            if (found.isEmpty()) {
+                return UpdateResult.notFound(name, installedVersion);
+            }
+            project = found.get();
+            resolvedHangar.put(name, project);
+        }
+
+        Optional<String> latest = hangar.latestReleaseVersion(project.slug());
+        if (latest.isEmpty()) {
+            return UpdateResult.notFound(name, installedVersion);
+        }
+        boolean outdated = VersionComparator.compare(latest.get(), installedVersion) > 0;
+        return new UpdateResult(name, installedVersion, latest.get(),
+                project.url(), UpdateResult.SOURCE_HANGAR,
                 outdated ? UpdateResult.Status.UPDATE_AVAILABLE : UpdateResult.Status.UP_TO_DATE);
     }
 
@@ -280,7 +332,7 @@ final class UpdateCheckService {
 
         if (outdated.isEmpty()) {
             plugin.getLogger().info("All " + results.size() + " checked plugins are up to date"
-                    + (unknown.isEmpty() ? "." : " (" + unknown.size() + " not found on Modrinth)."));
+                    + (unknown.isEmpty() ? "." : " (" + unknown.size() + " not found on Modrinth or Hangar)."));
         } else {
             plugin.getLogger().warning(outdated.size() + " plugin(s) have updates available:");
             for (UpdateResult r : outdated) {
@@ -289,7 +341,7 @@ final class UpdateCheckService {
             }
         }
         if (!unknown.isEmpty()) {
-            plugin.getLogger().info("Not found on Modrinth (add to 'overrides' or 'exclude' in config.yml): "
+            plugin.getLogger().info("Not found on Modrinth or Hangar (add to 'overrides' or 'exclude' in config.yml): "
                     + unknown.stream().map(UpdateResult::pluginName).collect(Collectors.joining(", ")));
         }
     }

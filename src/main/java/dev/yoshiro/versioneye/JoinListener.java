@@ -42,7 +42,7 @@ final class JoinListener implements Listener {
                     .append(Component.text(r.installedVersion(), NamedTextColor.RED))
                     .append(Component.text(" -> ", NamedTextColor.GRAY))
                     .append(Component.text(r.latestVersion(), NamedTextColor.GREEN))
-                    .append(Component.text(" [Modrinth]", NamedTextColor.AQUA)
+                    .append(Component.text(" [" + r.source() + "]", NamedTextColor.AQUA)
                             .clickEvent(ClickEvent.openUrl(r.projectUrl()))));
         }
     }

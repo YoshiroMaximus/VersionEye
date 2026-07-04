@@ -11,8 +11,10 @@ the main thread. Works on Paper, Purpur, and Folia.
 
 Plugins are identified by the sha512 hash of their jar, so they are matched
 to their exact Modrinth project and release with no name guessing. Jars
-Modrinth doesn't know fall back to name matching. Alpha and beta builds are
-ignored unless enabled.
+Modrinth doesn't know fall back to name matching, and plugins that aren't
+on Modrinth at all (like ProtocolLib) are looked up on
+[Hangar](https://hangar.papermc.io) as a last resort. Alpha and beta
+builds are ignored unless enabled.
 
 ## Commands and permissions
 
@@ -29,15 +31,17 @@ ignored unless enabled.
 | `notify-on-join` | `true` | Notify permitted players on join |
 | `require-matching-game-version` | `false` | Only count releases tagged for your MC version |
 | `include-prereleases` | `false` | Also count alpha/beta uploads as updates |
-| `overrides` | `{}` | Pin a plugin to an exact Modrinth slug |
+| `check-hangar` | `true` | Fall back to Hangar for plugins not on Modrinth |
+| `overrides` | `{}` | Pin a plugin to a Modrinth slug or `hangar:<slug>` |
 | `exclude` | `[VersionEye]` | Plugins to skip |
 
-If a plugin shows as not found, it either isn't on Modrinth or its jar came
-from somewhere else. Pin it to the right project, or exclude it:
+If a plugin shows as not found or matches the wrong project, pin it to a
+Modrinth slug or a Hangar project slug, or exclude it:
 
 ```yaml
 overrides:
   Essentials: essentialsx
+  ProtocolLib: hangar:ProtocolLib
 exclude:
   - SomePremiumPlugin
 ```

@@ -18,13 +18,20 @@ require-matching-game-version: false
 # Off by default so dev/snapshot builds are not reported.
 include-prereleases: false
 
+# Fall back to Hangar (hangar.papermc.io) for plugins that are not
+# published on Modrinth, e.g. ProtocolLib. Hangar has no file-hash lookup,
+# so this matches by plugin name, and only Release-channel uploads count.
+check-hangar: true
+
 # Map a plugin name to its exact Modrinth project slug or ID when automatic
 # matching picks the wrong project (or fails to find it). The plugin name is
-# the name shown in /plugins. Example:
+# the name shown in /plugins. Use "hangar:<slug>" to pin a plugin to a
+# Hangar project instead. Example:
 #
 # overrides:
 #   ViaVersion: viaversion
 #   "Essentials": essentialsx
+#   ProtocolLib: hangar:ProtocolLib
 overrides: {}
 
 # Plugins to skip entirely (by plugin name, case-insensitive).

@@ -3,12 +3,12 @@ version: '${version}'
 main: dev.yoshiro.versioneye.VersionEyePlugin
 api-version: '26.1'
 folia-supported: true
-description: Checks installed plugins for updates on Modrinth.
+description: Checks installed plugins for updates on Modrinth and Hangar.
 author: yoshiro
 
 commands:
   updatecheck:
-    description: Check all installed plugins for updates on Modrinth.
+    description: Check all installed plugins for updates on Modrinth and Hangar.
     usage: /updatecheck
     permission: versioneye.check
 
