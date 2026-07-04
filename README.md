@@ -1,31 +1,24 @@
-# VersionEye
-
 <img alt="Supported on Paper" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/supported/paper_vector.svg" height="56">
 <img alt="Built with Java 25" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/built-with/java25_vector.svg" height="56">
 
-Keeps an eye on your plugins so you don't have to. VersionEye scans every
-installed plugin against [Modrinth](https://modrinth.com) and tells you when
-something is outdated — in the console, in chat when ops join, and on demand
-with a command. All checks run off the main thread, so there's zero impact
-on server performance.
+A Paper plugin that checks your installed plugins for updates on
+[Modrinth](https://modrinth.com). Updates are reported in the console, to
+ops when they join, and on demand with `/updatecheck`. All checks run off
+the main thread.
 
-## ✨ Features
+Plugins are identified by the sha512 hash of their jar, so they are matched
+to their exact Modrinth project and release with no name guessing. Jars
+Modrinth doesn't know fall back to name matching. Alpha and beta builds are
+ignored unless enabled.
 
-- 🔄 Automatic check on startup and every 6 hours (configurable)
-- 🔔 Ops get a clickable update summary when they join
-- ⌨️ `/updatecheck` — run a check anytime
-- 🎯 Exact matching by jar file hash — knows precisely which release you're running
-- ⚡ Plugins are checked in parallel, so even big servers finish in seconds
-- 🧪 Ignores alpha/beta builds by default — only stable releases count
-
-## 📦 Commands & Permissions
+## Commands and permissions
 
 | Command | Permission | Default |
 |---|---|---|
 | `/updatecheck` | `versioneye.check` | op |
 | Join notifications | `versioneye.notify` | op |
 
-## ⚙️ Config
+## Config
 
 | Option | Default | What it does |
 |---|---|---|
@@ -36,15 +29,12 @@ on server performance.
 | `overrides` | `{}` | Pin a plugin to an exact Modrinth slug |
 | `exclude` | `[VersionEye]` | Plugins to skip |
 
-Plugins are identified by the sha512 hash of their jar, so downloads from
-Modrinth are matched to their exact project and release. Jars Modrinth
-doesn't know (e.g. downloaded from GitHub) fall back to name matching —
-if one shows as **not found**, pin it in the config:
+If a plugin shows as not found, it either isn't on Modrinth or its jar came
+from somewhere else. Pin it to the right project, or exclude it:
 
 ```yaml
 overrides:
   Essentials: essentialsx
+exclude:
+  - SomePremiumPlugin
 ```
-
-Plugins that aren't on Modrinth at all? Add them to `exclude` and they'll
-stay quiet.
