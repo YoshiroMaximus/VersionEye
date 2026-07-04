@@ -1,12 +1,13 @@
 ![VersionEye](https://i.imgur.com/ebpnaR1.png)
 
-<img alt="Supported on Paper" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/supported/paper_vector.svg" height="56">
-<img alt="Built with Java 25" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/built-with/java25_vector.svg" height="56">
+<p>
+<img alt="Supported on Paper" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/supported/paper_vector.svg" height="48"> <img alt="Supported on Purpur" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/supported/purpur_vector.svg" height="48"> <img alt="Built with Java 25" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/built-with/java25_vector.svg" height="48"> <a href="https://modrinth.com/plugin/versioneye"><img alt="Available on Modrinth" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/available/modrinth_vector.svg" height="48"></a>
+</p>
 
 A Paper plugin that checks your installed plugins for updates on
 [Modrinth](https://modrinth.com). Updates are reported in the console, to
 ops when they join, and on demand with `/updatecheck`. All checks run off
-the main thread.
+the main thread. Works on Paper, Purpur, and Folia.
 
 Plugins are identified by the sha512 hash of their jar, so they are matched
 to their exact Modrinth project and release with no name guessing. Jars
