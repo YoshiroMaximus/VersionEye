@@ -37,7 +37,9 @@ final class ModrinthClient {
             String versionNumber,
             String versionType,
             Instant datePublished,
-            Set<String> fileSha512s) {
+            Set<String> fileSha512s,
+            String fileUrl,
+            String fileSha512) {
 
         boolean isRelease() {
             return "release".equals(versionType);
@@ -148,22 +150,35 @@ final class ModrinthClient {
 
     private static VersionInfo parseVersion(JsonObject version) {
         Set<String> hashes = new HashSet<>();
+        JsonObject primary = null;
         JsonElement files = version.get("files");
         if (files != null && files.isJsonArray()) {
-            for (JsonElement file : files.getAsJsonArray()) {
-                JsonObject hashObj = file.getAsJsonObject().getAsJsonObject("hashes");
+            for (JsonElement element : files.getAsJsonArray()) {
+                JsonObject file = element.getAsJsonObject();
+                JsonObject hashObj = file.getAsJsonObject("hashes");
                 if (hashObj != null && hashObj.has("sha512")) {
                     hashes.add(hashObj.get("sha512").getAsString().toLowerCase(Locale.ROOT));
                 }
+                JsonElement primaryFlag = file.get("primary");
+                if (primary == null
+                        || (primaryFlag != null && !primaryFlag.isJsonNull() && primaryFlag.getAsBoolean())) {
+                    primary = file;
+                }
             }
         }
+        String fileUrl = primary != null ? primary.get("url").getAsString() : null;
+        String fileSha512 = primary != null && primary.getAsJsonObject("hashes").has("sha512")
+                ? primary.getAsJsonObject("hashes").get("sha512").getAsString().toLowerCase(Locale.ROOT)
+                : null;
         return new VersionInfo(
                 version.get("id").getAsString(),
                 version.get("project_id").getAsString(),
                 version.get("version_number").getAsString(),
                 version.get("version_type").getAsString(),
                 Instant.parse(version.get("date_published").getAsString()),
-                Set.copyOf(hashes));
+                Set.copyOf(hashes),
+                fileUrl,
+                fileSha512);
     }
 
     private JsonElement getJson(String url) throws IOException, InterruptedException {

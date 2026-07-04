@@ -41,6 +41,18 @@ final class ApiHttp {
                 .build());
     }
 
+    /** Downloads a URL to a file, following redirects. Overwrites the target. */
+    void download(String url, java.nio.file.Path target) throws IOException, InterruptedException {
+        HttpRequest request = request(url).timeout(Duration.ofMinutes(2)).GET().build();
+        HttpResponse<java.nio.file.Path> response = http.send(request,
+                HttpResponse.BodyHandlers.ofFile(target));
+        int status = response.statusCode();
+        if (status < 200 || status >= 300) {
+            java.nio.file.Files.deleteIfExists(target);
+            throw new IOException("HTTP " + status + " from " + request.uri());
+        }
+    }
+
     private HttpRequest.Builder request(String url) {
         return HttpRequest.newBuilder(URI.create(url))
                 .header("User-Agent", userAgent)
@@ -63,7 +75,7 @@ final class ApiHttp {
                 Thread.sleep(Math.clamp(waitSeconds, 1, 30) * 1000);
                 continue;
             }
-            if (status != 200) {
+            if (status < 200 || status >= 300) {
                 throw new IOException("HTTP " + status + " from " + request.uri());
             }
             return response.body();

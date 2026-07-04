@@ -24,6 +24,21 @@ include-prereleases: false
 # so this matches by plugin name, and only Release-channel uploads count.
 check-hangar: true
 
+# Automatically download available updates into the server's update folder
+# (plugins/update by default). Paper applies them on the next restart.
+# Downloads are verified against the source's published file hash when one
+# exists. /updatecheck download does the same thing on demand.
+auto-download: false
+
+# Post a message to this Discord webhook URL when new updates are found.
+# Each plugin version is announced once. Leave empty to disable.
+discord-webhook: ""
+
+# Updates the admin chose to skip (managed by /updatecheck ignore and
+# unignore). A plugin listed here with the exact latest version is reported
+# as up to date until something newer is published.
+ignored-versions: {}
+
 # Map a plugin name to its exact Modrinth project slug or ID when automatic
 # matching picks the wrong project (or fails to find it). The plugin name is
 # the name shown in /plugins. Use "hangar:<slug>" to pin a plugin to a

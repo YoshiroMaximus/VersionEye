@@ -22,6 +22,9 @@ builds are ignored unless enabled.
 |---|---|---|
 | `/updatecheck` | `versioneye.check` | op |
 | `/updatecheck -prerelease` (include alpha/beta uploads for this check) | `versioneye.check` | op |
+| `/updatecheck download [plugin]` (fetch updates, applied on restart) | `versioneye.download` | op |
+| `/updatecheck ignore <plugin>` (mute the current update until a newer one) | `versioneye.ignore` | op |
+| `/updatecheck unignore <plugin>` | `versioneye.ignore` | op |
 | `/updatecheck reload` (re-read config.yml without a restart) | `versioneye.reload` | op |
 | Join notifications | `versioneye.notify` | op |
 
@@ -34,8 +37,15 @@ builds are ignored unless enabled.
 | `require-matching-game-version` | `false` | Only count releases tagged for your MC version |
 | `include-prereleases` | `false` | Also count alpha/beta uploads as updates |
 | `check-hangar` | `true` | Fall back to Hangar for plugins not on Modrinth |
+| `auto-download` | `false` | Download updates into `plugins/update` automatically |
+| `discord-webhook` | `""` | Post new updates to a Discord webhook |
+| `ignored-versions` | `{}` | Muted updates, managed by `/updatecheck ignore` |
 | `overrides` | `{}` | Pin a plugin to a Modrinth slug or `hangar:<slug>` |
 | `exclude` | `[VersionEye]` | Plugins to skip |
+
+Downloaded updates go to the server's update folder under the installed
+jar's filename and are verified against the source's published hash;
+Paper swaps them in on the next restart.
 
 If a plugin shows as not found or matches the wrong project, pin it to a
 Modrinth slug or a Hangar project slug, or exclude it:

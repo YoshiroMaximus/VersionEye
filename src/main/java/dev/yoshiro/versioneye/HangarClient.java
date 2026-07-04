@@ -76,6 +76,36 @@ final class HangarClient {
                 : Optional.of(version.strip());
     }
 
+    /**
+     * Download URL and (when the file is hosted on Hangar) its sha256 for a
+     * specific version. Externally hosted files have no hash; the endpoint
+     * redirects to the external URL.
+     */
+    record DownloadInfo(String url, String sha256) {
+    }
+
+    Optional<DownloadInfo> downloadInfo(String slug, String version)
+            throws IOException, InterruptedException {
+        JsonElement body = getJson(API + "/projects/" + ApiHttp.encode(slug)
+                + "/versions/" + ApiHttp.encode(version));
+        if (body == null) {
+            return Optional.empty();
+        }
+        JsonElement paper = body.getAsJsonObject().getAsJsonObject("downloads").get("PAPER");
+        if (paper == null || !paper.isJsonObject()) {
+            return Optional.empty();
+        }
+        String url = API + "/projects/" + ApiHttp.encode(slug)
+                + "/versions/" + ApiHttp.encode(version) + "/PAPER/download";
+        JsonElement fileInfo = paper.getAsJsonObject().get("fileInfo");
+        String sha256 = fileInfo != null && fileInfo.isJsonObject()
+                && fileInfo.getAsJsonObject().get("sha256Hash") != null
+                && !fileInfo.getAsJsonObject().get("sha256Hash").isJsonNull()
+                ? fileInfo.getAsJsonObject().get("sha256Hash").getAsString()
+                : null;
+        return Optional.of(new DownloadInfo(url, sha256));
+    }
+
     private static Project parseProject(JsonObject project) {
         JsonObject namespace = project.getAsJsonObject("namespace");
         return new Project(
