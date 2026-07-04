@@ -1,3 +1,5 @@
+![VersionEye](https://i.imgur.com/ebpnaR1.png)
+
 <img alt="Supported on Paper" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/supported/paper_vector.svg" height="56">
 <img alt="Built with Java 25" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/built-with/java25_vector.svg" height="56">
 
