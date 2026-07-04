@@ -1,0 +1,15 @@
+# Gradle
+build/
+.gradle/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+bin/
+
+# macOS
+.DS_Store

@@ -1,0 +1,32 @@
+# VersionEye configuration
+
+# How often to automatically re-check for updates, in hours.
+# Set to 0 to disable periodic checks (a check still runs once on startup).
+check-interval-hours: 6
+
+# Notify players with the "versioneye.notify" permission (ops by default)
+# about outdated plugins when they join.
+notify-on-join: true
+
+# Only count a Modrinth release as an update if it declares support for this
+# server's Minecraft version. Turning this on avoids suggesting updates that
+# don't support your version yet, but many projects lag behind on tagging
+# versions, so some real updates may be missed.
+require-matching-game-version: false
+
+# Also consider alpha/beta channel uploads on Modrinth as updates.
+# Off by default so dev/snapshot builds are not reported.
+include-prereleases: false
+
+# Map a plugin name to its exact Modrinth project slug or ID when automatic
+# matching picks the wrong project (or fails to find it). The plugin name is
+# the name shown in /plugins. Example:
+#
+# overrides:
+#   ViaVersion: viaversion
+#   "Essentials": essentialsx
+overrides: {}
+
+# Plugins to skip entirely (by plugin name, case-insensitive).
+exclude:
+  - VersionEye

@@ -1,0 +1,20 @@
+name: VersionEye
+version: '${version}'
+main: dev.yoshiro.versioneye.VersionEyePlugin
+api-version: '26.1'
+description: Checks installed plugins for updates on Modrinth.
+author: yoshiro
+
+commands:
+  updatecheck:
+    description: Check all installed plugins for updates on Modrinth.
+    usage: /updatecheck
+    permission: versioneye.check
+
+permissions:
+  versioneye.check:
+    description: Allows running /updatecheck.
+    default: op
+  versioneye.notify:
+    description: Receive update notifications on join.
+    default: op
