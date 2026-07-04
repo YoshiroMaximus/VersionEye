@@ -57,7 +57,7 @@ final class UpdateCheckCommand implements CommandExecutor {
             }
         }
         if (!notFound.isEmpty()) {
-            sender.sendMessage(Component.text("Not found on Modrinth or Hangar: "
+            sender.sendMessage(Component.text("Not found on " + UpdateResult.ALL_SOURCES + ": "
                     + notFound.stream().map(UpdateResult::pluginName)
                             .reduce((a, b) -> a + ", " + b).orElse(""),
                     NamedTextColor.GRAY));

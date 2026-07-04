@@ -10,6 +10,8 @@ public record UpdateResult(
 
     public static final String SOURCE_MODRINTH = "Modrinth";
     public static final String SOURCE_HANGAR = "Hangar";
+    /** All sources checked, for "not found on ..." messages. */
+    public static final String ALL_SOURCES = SOURCE_MODRINTH + " or " + SOURCE_HANGAR;
 
     public enum Status {
         UP_TO_DATE,

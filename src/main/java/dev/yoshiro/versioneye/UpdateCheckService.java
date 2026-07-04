@@ -51,8 +51,9 @@ final class UpdateCheckService {
 
     UpdateCheckService(VersionEyePlugin plugin) {
         this.plugin = plugin;
-        this.modrinth = new ModrinthClient(plugin.getPluginMeta().getVersion());
-        this.hangar = new HangarClient(plugin.getPluginMeta().getVersion());
+        ApiHttp http = new ApiHttp(plugin.getPluginMeta().getVersion());
+        this.modrinth = new ModrinthClient(http);
+        this.hangar = new HangarClient(http);
         this.executor = Executors.newFixedThreadPool(MAX_CONCURRENT_CHECKS, runnable -> {
             Thread thread = new Thread(runnable, "VersionEye-worker");
             thread.setDaemon(true);
@@ -90,6 +91,7 @@ final class UpdateCheckService {
                     ? plugin.getServer().getMinecraftVersion()
                     : null;
             boolean includePrereleases = plugin.getConfig().getBoolean("include-prereleases", false);
+            boolean checkHangar = plugin.getConfig().getBoolean("check-hangar", true);
 
             List<CompletableFuture<UpdateResult>> futures = new ArrayList<>();
             for (Plugin target : plugin.getServer().getPluginManager().getPlugins()) {
@@ -100,7 +102,8 @@ final class UpdateCheckService {
                 String installedVersion = target.getPluginMeta().getVersion();
                 Path jar = pluginJar(target);
                 futures.add(CompletableFuture.supplyAsync(
-                        () -> checkOne(name, installedVersion, jar, gameVersion, includePrereleases),
+                        () -> checkOne(name, installedVersion, jar, gameVersion,
+                                includePrereleases, checkHangar),
                         executor));
             }
 
@@ -121,7 +124,7 @@ final class UpdateCheckService {
     }
 
     private UpdateResult checkOne(String name, String installedVersion, Path jar,
-            String gameVersion, boolean includePrereleases) {
+            String gameVersion, boolean includePrereleases, boolean checkHangar) {
         try {
             // A configured override always wins over automatic matching.
             String override = override(name);
@@ -132,7 +135,8 @@ final class UpdateCheckService {
                     return byHash.get();
                 }
             }
-            return checkByName(name, installedVersion, override, gameVersion, includePrereleases);
+            return checkByName(name, installedVersion, override, gameVersion,
+                    includePrereleases, checkHangar);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return UpdateResult.error(name, installedVersion);
@@ -207,7 +211,7 @@ final class UpdateCheckService {
      * looked up on Hangar instead.
      */
     private UpdateResult checkByName(String name, String installedVersion, String override,
-            String gameVersion, boolean includePrereleases) throws Exception {
+            String gameVersion, boolean includePrereleases, boolean checkHangar) throws Exception {
         // An override like "hangar:ProtocolLib" pins the plugin to a Hangar project.
         if (override != null && override.toLowerCase(Locale.ROOT).startsWith("hangar:")) {
             return checkOnHangar(name, installedVersion, override.substring("hangar:".length()).strip());
@@ -219,7 +223,7 @@ final class UpdateCheckService {
                     ? modrinth.fetchProject(override)
                     : modrinth.resolveProject(name);
             if (found.isEmpty()) {
-                if (override == null && plugin.getConfig().getBoolean("check-hangar", true)) {
+                if (override == null && checkHangar) {
                     return checkOnHangar(name, installedVersion, null);
                 }
                 return UpdateResult.notFound(name, installedVersion);
@@ -332,7 +336,8 @@ final class UpdateCheckService {
 
         if (outdated.isEmpty()) {
             plugin.getLogger().info("All " + results.size() + " checked plugins are up to date"
-                    + (unknown.isEmpty() ? "." : " (" + unknown.size() + " not found on Modrinth or Hangar)."));
+                    + (unknown.isEmpty() ? "."
+                            : " (" + unknown.size() + " not found on " + UpdateResult.ALL_SOURCES + ")."));
         } else {
             plugin.getLogger().warning(outdated.size() + " plugin(s) have updates available:");
             for (UpdateResult r : outdated) {
@@ -341,7 +346,8 @@ final class UpdateCheckService {
             }
         }
         if (!unknown.isEmpty()) {
-            plugin.getLogger().info("Not found on Modrinth or Hangar (add to 'overrides' or 'exclude' in config.yml): "
+            plugin.getLogger().info("Not found on " + UpdateResult.ALL_SOURCES
+                    + " (add to 'overrides' or 'exclude' in config.yml): "
                     + unknown.stream().map(UpdateResult::pluginName).collect(Collectors.joining(", ")));
         }
     }

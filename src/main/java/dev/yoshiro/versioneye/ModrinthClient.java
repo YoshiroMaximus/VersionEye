@@ -1,13 +1,6 @@
 package dev.yoshiro.versioneye;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Locale;
@@ -29,16 +22,10 @@ final class ModrinthClient {
     private static final String API = "https://api.modrinth.com/v2";
     private static final String LOADERS_JSON = "[\"paper\",\"spigot\",\"bukkit\",\"folia\"]";
 
-    private final HttpClient http;
-    private final String userAgent;
+    private final ApiHttp http;
 
-    ModrinthClient(String pluginVersion) {
-        this.http = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build();
-        // Modrinth requires a User-Agent identifying the application.
-        this.userAgent = "yoshiro/VersionEye/" + pluginVersion + " (https://github.com/YoshiroMaximus/VersionEye)";
+    ModrinthClient(ApiHttp http) {
+        this.http = http;
     }
 
     record Project(String id, String slug, String title) {
@@ -66,7 +53,7 @@ final class ModrinthClient {
      * sha512 of the file. Empty if Modrinth does not know this file.
      */
     Optional<VersionInfo> versionFromHash(String sha512) throws IOException, InterruptedException {
-        JsonElement body = get(API + "/version_file/" + sha512 + "?algorithm=sha512");
+        JsonElement body = getJson(API + "/version_file/" + sha512 + "?algorithm=sha512");
         return body == null ? Optional.empty() : Optional.of(parseVersion(body.getAsJsonObject()));
     }
 
@@ -78,8 +65,10 @@ final class ModrinthClient {
             throws IOException, InterruptedException {
         String gameVersions = gameVersion == null ? "[]" : "[\"" + gameVersion + "\"]";
         String payload = "{\"loaders\":" + LOADERS_JSON + ",\"game_versions\":" + gameVersions + "}";
-        JsonElement body = post(API + "/version_file/" + sha512 + "/update?algorithm=sha512", payload);
-        return body == null ? Optional.empty() : Optional.of(parseVersion(body.getAsJsonObject()));
+        String body = http.post(API + "/version_file/" + sha512 + "/update?algorithm=sha512", payload);
+        return body == null
+                ? Optional.empty()
+                : Optional.of(parseVersion(JsonParser.parseString(body).getAsJsonObject()));
     }
 
     /**
@@ -97,7 +86,7 @@ final class ModrinthClient {
 
     /** Fetches a project by its exact slug or ID; empty if it does not exist. */
     Optional<Project> fetchProject(String slugOrId) throws IOException, InterruptedException {
-        JsonElement body = get(API + "/project/" + encode(slugOrId));
+        JsonElement body = getJson(API + "/project/" + ApiHttp.encode(slugOrId));
         if (body == null) {
             return Optional.empty();
         }
@@ -110,19 +99,19 @@ final class ModrinthClient {
 
     private Optional<Project> searchExact(String pluginName) throws IOException, InterruptedException {
         String url = API + "/search?limit=10"
-                + "&query=" + encode(pluginName)
-                + "&facets=" + encode("[[\"project_type:plugin\"]]");
-        JsonElement body = get(url);
+                + "&query=" + ApiHttp.encode(pluginName)
+                + "&facets=" + ApiHttp.encode("[[\"project_type:plugin\"]]");
+        JsonElement body = getJson(url);
         if (body == null) {
             return Optional.empty();
         }
-        String wanted = normalize(pluginName);
+        String wanted = ApiHttp.normalize(pluginName);
         JsonArray hits = body.getAsJsonObject().getAsJsonArray("hits");
         for (JsonElement hit : hits) {
             JsonObject obj = hit.getAsJsonObject();
             String title = obj.get("title").getAsString();
             String slug = obj.get("slug").getAsString();
-            if (normalize(title).equals(wanted) || normalize(slug).equals(wanted)) {
+            if (ApiHttp.normalize(title).equals(wanted) || ApiHttp.normalize(slug).equals(wanted)) {
                 return Optional.of(new Project(obj.get("project_id").getAsString(), slug, title));
             }
         }
@@ -137,12 +126,12 @@ final class ModrinthClient {
      */
     Optional<VersionInfo> latestVersion(String projectId, String gameVersion, boolean includePrereleases)
             throws IOException, InterruptedException {
-        String url = API + "/project/" + encode(projectId) + "/version"
-                + "?loaders=" + encode(LOADERS_JSON);
+        String url = API + "/project/" + ApiHttp.encode(projectId) + "/version"
+                + "?loaders=" + ApiHttp.encode(LOADERS_JSON);
         if (gameVersion != null) {
-            url += "&game_versions=" + encode("[\"" + gameVersion + "\"]");
+            url += "&game_versions=" + ApiHttp.encode("[\"" + gameVersion + "\"]");
         }
-        JsonElement body = get(url);
+        JsonElement body = getJson(url);
         if (body == null) {
             return Optional.empty();
         }
@@ -177,51 +166,8 @@ final class ModrinthClient {
                 Set.copyOf(hashes));
     }
 
-    private JsonElement get(String url) throws IOException, InterruptedException {
-        return send(request(url).GET().build());
-    }
-
-    private JsonElement post(String url, String jsonBody) throws IOException, InterruptedException {
-        return send(request(url)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build());
-    }
-
-    private HttpRequest.Builder request(String url) {
-        return HttpRequest.newBuilder(URI.create(url))
-                .header("User-Agent", userAgent)
-                .timeout(Duration.ofSeconds(15));
-    }
-
-    /**
-     * Sends the request, retrying briefly when rate-limited. Returns the
-     * parsed body, or null on 404. Throws on other failures.
-     */
-    private JsonElement send(HttpRequest request) throws IOException, InterruptedException {
-        for (int attempt = 1; ; attempt++) {
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            int status = response.statusCode();
-            if (status == 404) {
-                return null;
-            }
-            if (status == 429 && attempt < 3) {
-                long waitSeconds = response.headers().firstValueAsLong("Retry-After").orElse(2);
-                Thread.sleep(Math.clamp(waitSeconds, 1, 30) * 1000);
-                continue;
-            }
-            if (status != 200) {
-                throw new IOException("Modrinth returned HTTP " + status + " for " + request.uri());
-            }
-            return JsonParser.parseString(response.body());
-        }
-    }
-
-    private static String encode(String s) {
-        return URLEncoder.encode(s, StandardCharsets.UTF_8);
-    }
-
-    private static String normalize(String s) {
-        return s.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+    private JsonElement getJson(String url) throws IOException, InterruptedException {
+        String body = http.get(url);
+        return body == null ? null : JsonParser.parseString(body);
     }
 }
