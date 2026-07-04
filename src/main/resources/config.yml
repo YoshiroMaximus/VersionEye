@@ -16,6 +16,7 @@ require-matching-game-version: false
 
 # Also consider alpha/beta channel uploads on Modrinth as updates.
 # Off by default so dev/snapshot builds are not reported.
+# For a one-off check, /updatecheck -prerelease does this without config.
 include-prereleases: false
 
 # Fall back to Hangar (hangar.papermc.io) for plugins that are not

@@ -9,12 +9,15 @@ author: yoshiro
 commands:
   updatecheck:
     description: Check all installed plugins for updates on Modrinth and Hangar.
-    usage: /updatecheck
+    usage: /updatecheck [-prerelease] or /updatecheck reload
     permission: versioneye.check
 
 permissions:
   versioneye.check:
     description: Allows running /updatecheck.
+    default: op
+  versioneye.reload:
+    description: Allows running /updatecheck reload.
     default: op
   versioneye.notify:
     description: Receive update notifications on join.

@@ -21,6 +21,8 @@ builds are ignored unless enabled.
 | Command | Permission | Default |
 |---|---|---|
 | `/updatecheck` | `versioneye.check` | op |
+| `/updatecheck -prerelease` (include alpha/beta uploads for this check) | `versioneye.check` | op |
+| `/updatecheck reload` (re-read config.yml without a restart) | `versioneye.reload` | op |
 | Join notifications | `versioneye.notify` | op |
 
 ## Config

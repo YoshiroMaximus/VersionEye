@@ -69,17 +69,29 @@ final class UpdateCheckService {
         return lastResults;
     }
 
+    /** Drops cached project resolutions, so config override changes take effect. */
+    void clearCaches() {
+        resolved.clear();
+        resolvedHangar.clear();
+        knownFiles.clear();
+    }
+
     List<UpdateResult> lastOutdated() {
         return lastResults.stream()
                 .filter(r -> r.status() == UpdateResult.Status.UPDATE_AVAILABLE)
                 .toList();
     }
 
+    /** Checks every installed plugin with the configured prerelease setting. */
+    List<UpdateResult> checkAll() {
+        return checkAll(plugin.getConfig().getBoolean("include-prereleases", false));
+    }
+
     /**
      * Checks every installed plugin. If a check is already in progress,
      * returns the previous results instead of starting a second one.
      */
-    List<UpdateResult> checkAll() {
+    List<UpdateResult> checkAll(boolean includePrereleases) {
         if (!checkRunning.compareAndSet(false, true)) {
             return lastResults;
         }
@@ -90,7 +102,6 @@ final class UpdateCheckService {
             String gameVersion = plugin.getConfig().getBoolean("require-matching-game-version", false)
                     ? plugin.getServer().getMinecraftVersion()
                     : null;
-            boolean includePrereleases = plugin.getConfig().getBoolean("include-prereleases", false);
             boolean checkHangar = plugin.getConfig().getBoolean("check-hangar", true);
 
             List<CompletableFuture<UpdateResult>> futures = new ArrayList<>();
