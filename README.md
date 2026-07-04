@@ -1,7 +1,7 @@
 ![VersionEye](https://i.imgur.com/ebpnaR1.png)
 
 <p>
-<img alt="Supported on Paper" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/supported/paper_vector.svg" height="48"> <img alt="Supported on Purpur" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/supported/purpur_vector.svg" height="48"> <img alt="Built with Java 25" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/built-with/java25_vector.svg" height="48"> <a href="https://modrinth.com/plugin/versioneye"><img alt="Available on Modrinth" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/available/modrinth_vector.svg" height="48"></a>
+<img alt="Supported on Paper" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/supported/paper_vector.svg" height="48"> <img alt="Supported on Purpur" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/supported/purpur_vector.svg" height="48"> <img alt="Built with Java 25" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/built-with/java25_vector.svg" height="48"> <a href="https://modrinth.com/plugin/versioneye"><img alt="Available on Modrinth" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/available/modrinth_vector.svg" height="48"></a> <a href="https://hangar.papermc.io/yoshiro/VersionEye"><img alt="Available on Hangar" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3.3.1/assets/cozy/available/hangar_vector.svg" height="48"></a>
 </p>
 
 A Paper plugin that checks your installed plugins for updates on
