@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Gradle dependencies and plugins (paper-api, minotaur, hangar-publish)
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+
+  # Action versions in .github/workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
