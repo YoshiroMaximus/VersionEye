@@ -156,8 +156,10 @@ final class UpdateCheckService {
 
     private UpdateResult checkOne(String name, String installedVersion, Path jar,
             String gameVersion, boolean includePrereleases, boolean checkHangar) {
+        // Kept aside so a transient API failure doesn't lose a download the
+        // previous check already found.
+        PendingDownload previous = pendingDownloads.remove(name);
         try {
-            pendingDownloads.remove(name);
             // A configured override always wins over automatic matching.
             String override = override(name);
             Optional<UpdateResult> byHash = override == null && jar != null
@@ -179,10 +181,18 @@ final class UpdateCheckService {
             return result;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            restorePendingDownload(name, previous);
             return UpdateResult.error(name, installedVersion);
         } catch (Exception e) {
             plugin.getLogger().warning("Update check failed for " + name + ": " + e.getMessage());
+            restorePendingDownload(name, previous);
             return UpdateResult.error(name, installedVersion);
+        }
+    }
+
+    private void restorePendingDownload(String name, PendingDownload previous) {
+        if (previous != null) {
+            pendingDownloads.putIfAbsent(name, previous);
         }
     }
 
@@ -535,11 +545,17 @@ final class UpdateCheckService {
         List<UpdateResult> unknown = results.stream()
                 .filter(r -> r.status() == UpdateResult.Status.NOT_FOUND)
                 .toList();
+        List<UpdateResult> failed = results.stream()
+                .filter(r -> r.status() == UpdateResult.Status.ERROR)
+                .toList();
+        int checked = results.size() - failed.size();
 
         if (outdated.isEmpty()) {
-            plugin.getLogger().info("All " + results.size() + " checked plugins are up to date"
-                    + (unknown.isEmpty() ? "."
-                            : " (" + unknown.size() + " not found on " + UpdateResult.ALL_SOURCES + ")."));
+            if (checked > 0) {
+                plugin.getLogger().info("All " + checked + " checked plugins are up to date"
+                        + (unknown.isEmpty() ? "."
+                                : " (" + unknown.size() + " not found on " + UpdateResult.ALL_SOURCES + ")."));
+            }
         } else {
             plugin.getLogger().warning(outdated.size() + " plugin(s) have updates available:");
             for (UpdateResult r : outdated) {
@@ -551,6 +567,10 @@ final class UpdateCheckService {
             plugin.getLogger().info("Not found on " + UpdateResult.ALL_SOURCES
                     + " (add to 'overrides' or 'exclude' in config.yml): "
                     + unknown.stream().map(UpdateResult::pluginName).collect(Collectors.joining(", ")));
+        }
+        if (!failed.isEmpty()) {
+            plugin.getLogger().warning("Could not check " + failed.size() + " plugin(s): "
+                    + failed.stream().map(UpdateResult::pluginName).collect(Collectors.joining(", ")));
         }
 
         if (!outdated.isEmpty() && plugin.getConfig().getBoolean("auto-download", false)) {

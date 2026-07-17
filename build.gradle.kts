@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "dev.yoshiro"
-version = "1.3.2"
+version = "1.4.0"
 
 // Minecraft versions declared on Modrinth and Hangar uploads.
 // Update this list when new Minecraft versions come out.

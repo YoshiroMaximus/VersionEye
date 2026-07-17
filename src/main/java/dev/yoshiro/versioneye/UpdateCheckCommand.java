@@ -138,9 +138,12 @@ final class UpdateCheckCommand implements TabExecutor {
                 .filter(r -> r.status() == UpdateResult.Status.ERROR)
                 .toList();
 
+        int checked = results.size() - errors.size();
         if (outdated.isEmpty()) {
-            sender.sendMessage(Component.text("All " + results.size()
-                    + " checked plugins are up to date.", NamedTextColor.GREEN));
+            if (checked > 0) {
+                sender.sendMessage(Component.text("All " + checked
+                        + " checked plugins are up to date.", NamedTextColor.GREEN));
+            }
         } else {
             sender.sendMessage(Component.text(outdated.size()
                     + " plugin(s) have updates available:", NamedTextColor.GOLD));
