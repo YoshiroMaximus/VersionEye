@@ -11,36 +11,69 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Logger;
 
 /**
  * HTTP plumbing shared by the API clients: one connection pool, the
- * User-Agent identifying this plugin, and retry-on-rate-limit handling.
+ * User-Agent identifying this plugin, and retry and outage handling.
+ * <p>
+ * Rate-limited requests (429) are retried after the advertised wait.
+ * Idempotent requests are also retried once after a transient failure
+ * (5xx or a network error), and consecutive transient failures trip a
+ * per-host breaker so a full API outage fails fast instead of timing
+ * out request by request.
  */
 final class ApiHttp {
 
+    private static final int HOST_FAILURE_LIMIT = 4;
+    private static final long TRANSIENT_RETRY_MILLIS = 2000;
+
     private final HttpClient http;
     private final String userAgent;
+    private final Logger logger;
+    /** Host -> consecutive transient failures; any healthy response resets it. */
+    private final Map<String, AtomicInteger> hostFailures = new ConcurrentHashMap<>();
 
-    ApiHttp(String pluginVersion) {
+    /** Thrown without a network attempt while a host's breaker is open. */
+    static final class HostDownException extends IOException {
+        HostDownException(String host) {
+            super(host + " appears to be down, request skipped");
+        }
+    }
+
+    ApiHttp(String pluginVersion, Logger logger) {
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
+        this.logger = logger;
         // Modrinth and Hangar want a User-Agent identifying the application.
         this.userAgent = "yoshiro/VersionEye/" + pluginVersion + " (https://github.com/YoshiroMaximus/VersionEye)";
     }
 
-    /** GETs a URL and returns the response body. Null on 404. */
-    String get(String url) throws IOException, InterruptedException {
-        return send(request(url).GET().build());
+    /** Reopens tripped host breakers, giving every host a fresh chance. */
+    void resetHostFailures() {
+        hostFailures.clear();
     }
 
-    /** POSTs a JSON body and returns the response body. Null on 404. */
-    String post(String url, String jsonBody) throws IOException, InterruptedException {
+    /** GETs a URL and returns the response body. Null on 404. */
+    String get(String url) throws IOException, InterruptedException {
+        return send(request(url).GET().build(), true);
+    }
+
+    /**
+     * POSTs a JSON body and returns the response body. Null on 404. Only
+     * idempotent requests (lookups, not webhook posts) may be retried
+     * after a transient failure.
+     */
+    String post(String url, String jsonBody, boolean idempotent) throws IOException, InterruptedException {
         return send(request(url)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build());
+                .build(), idempotent);
     }
 
     /** Downloads a URL to a file, following redirects. Overwrites the target. */
@@ -55,19 +88,45 @@ final class ApiHttp {
     }
 
     private HttpRequest.Builder request(String url) {
+        // Short enough that a retry still beats one long attempt; Modrinth
+        // responds within a few seconds even when degraded.
         return HttpRequest.newBuilder(URI.create(url))
                 .header("User-Agent", userAgent)
-                .timeout(Duration.ofSeconds(15));
+                .timeout(Duration.ofSeconds(10));
     }
 
     /**
-     * Sends the request, retrying briefly when rate-limited. Returns the
-     * body, or null on 404. Throws on other failures.
+     * Sends the request with the retry and breaker behavior described on
+     * the class. Returns the body, or null on 404. Throws on other
+     * failures; {@link HostDownException} while the host's breaker is open.
      */
-    private String send(HttpRequest request) throws IOException, InterruptedException {
+    private String send(HttpRequest request, boolean idempotent) throws IOException, InterruptedException {
+        String host = request.uri().getHost();
         for (int attempt = 1; ; attempt++) {
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (failures(host).get() >= HOST_FAILURE_LIMIT) {
+                throw new HostDownException(host);
+            }
+            HttpResponse<String> response;
+            try {
+                response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            } catch (IOException e) {
+                recordFailure(host);
+                if (idempotent && attempt < 2) {
+                    Thread.sleep(TRANSIENT_RETRY_MILLIS);
+                    continue;
+                }
+                throw e;
+            }
             int status = response.statusCode();
+            if (status >= 500) {
+                recordFailure(host);
+                if (idempotent && attempt < 2) {
+                    Thread.sleep(TRANSIENT_RETRY_MILLIS);
+                    continue;
+                }
+                throw new IOException("HTTP " + status + " from " + request.uri());
+            }
+            failures(host).set(0);
             if (status == 404) {
                 return null;
             }
@@ -80,6 +139,17 @@ final class ApiHttp {
                 throw new IOException("HTTP " + status + " from " + request.uri());
             }
             return response.body();
+        }
+    }
+
+    private AtomicInteger failures(String host) {
+        return hostFailures.computeIfAbsent(host, h -> new AtomicInteger());
+    }
+
+    private void recordFailure(String host) {
+        if (failures(host).incrementAndGet() == HOST_FAILURE_LIMIT) {
+            logger.warning(host + " appears to be down (" + HOST_FAILURE_LIMIT
+                    + " consecutive failures); skipping requests to it until the next check.");
         }
     }
 

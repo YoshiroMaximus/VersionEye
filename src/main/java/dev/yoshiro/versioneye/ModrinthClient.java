@@ -67,7 +67,7 @@ final class ModrinthClient {
             throws IOException, InterruptedException {
         String gameVersions = gameVersion == null ? "[]" : "[\"" + gameVersion + "\"]";
         String payload = "{\"loaders\":" + LOADERS_JSON + ",\"game_versions\":" + gameVersions + "}";
-        String body = http.post(API + "/version_file/" + sha512 + "/update?algorithm=sha512", payload);
+        String body = http.post(API + "/version_file/" + sha512 + "/update?algorithm=sha512", payload, true);
         return body == null
                 ? Optional.empty()
                 : Optional.of(parseVersion(JsonParser.parseString(body).getAsJsonObject()));

@@ -45,6 +45,7 @@ final class DiscordWebhook {
         payload.addProperty("username", "VersionEye");
         payload.add("embeds", embeds);
 
-        http.post(webhookUrl, payload.toString());
+        // Not idempotent: a retried webhook post could announce twice.
+        http.post(webhookUrl, payload.toString(), false);
     }
 }

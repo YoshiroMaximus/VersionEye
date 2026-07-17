@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -70,7 +71,7 @@ final class UpdateCheckService {
 
     UpdateCheckService(VersionEyePlugin plugin) {
         this.plugin = plugin;
-        this.http = new ApiHttp(plugin.getPluginMeta().getVersion());
+        this.http = new ApiHttp(plugin.getPluginMeta().getVersion(), plugin.getLogger());
         this.modrinth = new ModrinthClient(http);
         this.hangar = new HangarClient(http);
         this.discord = new DiscordWebhook(http);
@@ -116,6 +117,8 @@ final class UpdateCheckService {
             return lastResults;
         }
         try {
+            // A host that was down last run gets a fresh chance.
+            http.resetHostFailures();
             Set<String> excluded = plugin.getConfig().getStringList("exclude").stream()
                     .map(s -> s.toLowerCase(Locale.ROOT))
                     .collect(Collectors.toSet());
@@ -147,11 +150,32 @@ final class UpdateCheckService {
                 }
             }
             results.sort((a, b) -> a.pluginName().compareToIgnoreCase(b.pluginName()));
-            lastResults = List.copyOf(results);
-            return lastResults;
+            lastResults = mergeWithPrevious(lastResults, results);
+            return List.copyOf(results);
         } finally {
             checkRunning.set(false);
         }
+    }
+
+    /**
+     * The cached state keeps the last successful result for plugins whose
+     * check failed this run, so a transient API outage doesn't wipe what
+     * is already known (join notifications, ignore and download targets).
+     * The failure is still reported through the fresh results.
+     */
+    private static List<UpdateResult> mergeWithPrevious(List<UpdateResult> previous,
+            List<UpdateResult> fresh) {
+        Map<String, UpdateResult> known = new HashMap<>();
+        for (UpdateResult r : previous) {
+            if (r.status() != UpdateResult.Status.ERROR) {
+                known.put(r.pluginName().toLowerCase(Locale.ROOT), r);
+            }
+        }
+        return fresh.stream()
+                .map(r -> r.status() == UpdateResult.Status.ERROR
+                        ? known.getOrDefault(r.pluginName().toLowerCase(Locale.ROOT), r)
+                        : r)
+                .toList();
     }
 
     private UpdateResult checkOne(String name, String installedVersion, Path jar,
@@ -181,6 +205,10 @@ final class UpdateCheckService {
             return result;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            restorePendingDownload(name, previous);
+            return UpdateResult.error(name, installedVersion);
+        } catch (ApiHttp.HostDownException e) {
+            // The breaker already logged one warning for the whole outage.
             restorePendingDownload(name, previous);
             return UpdateResult.error(name, installedVersion);
         } catch (Exception e) {
