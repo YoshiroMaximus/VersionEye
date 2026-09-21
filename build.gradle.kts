@@ -2,7 +2,7 @@ import io.papermc.hangarpublishplugin.model.Platforms
 
 plugins {
     java
-    id("com.modrinth.minotaur") version "2.9.0"
+    id("com.modrinth.minotaur") version "2.10.0"
     id("io.papermc.hangar-publish-plugin") version "0.1.4"
 }
 
